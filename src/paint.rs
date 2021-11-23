@@ -859,17 +859,25 @@ mod superimpose_style_sections {
     use crate::style::Style;
     use crate::utils::bat::terminal::to_ansi_color;
 
+    // We have two different annotations of the same line:
+    // `syntax_style_sections` contains foreground styles computed by syntect,
+    // and `diff_style_sections` contains styles computed by delta reflecting
+    // within-line edits. The delta styles may assign a foreground color, or
+    // they may indicate that the foreground color comes from syntax
+    // highlighting (the is_syntax_highlighting attribute on style::Style). This
+    // function takes in the two input streams and outputs one stream with a
+    // single style assigned to each character.
     pub fn superimpose_style_sections(
-        sections_1: &[(SyntectStyle, &str)],
-        sections_2: &[(Style, &str)],
+        syntax_style_sections: &[(SyntectStyle, &str)],
+        diff_style_sections: &[(Style, &str)],
         true_color: bool,
         null_syntect_style: SyntectStyle,
     ) -> Vec<(Style, String)> {
         coalesce(
             superimpose(
-                explode(sections_1)
+                explode(syntax_style_sections)
                     .iter()
-                    .zip(explode(sections_2))
+                    .zip(explode(diff_style_sections))
                     .collect::<Vec<(&(SyntectStyle, char), (Style, char))>>(),
             ),
             true_color,
