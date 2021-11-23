@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::Write;
 
 use itertools::Itertools;
@@ -6,7 +7,6 @@ use syntect::highlighting::Style as SyntectStyle;
 use syntect::parsing::{SyntaxReference, SyntaxSet};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::ansi;
 use crate::config::{self, delta_unreachable, Config};
 use crate::delta::State;
 use crate::edits;
@@ -18,6 +18,7 @@ use crate::minusplus::*;
 use crate::paint::superimpose_style_sections::superimpose_style_sections;
 use crate::style::Style;
 use crate::wrapping::wrap_minusplus_block;
+use crate::{ansi, style};
 
 pub struct Painter<'p> {
     pub minus_lines: Vec<(String, State)>,
@@ -138,13 +139,30 @@ impl<'p> Painter<'p> {
     /// ANSI escape sequences.
     pub fn prepare_raw_line(&self, line: &str) -> String {
         ansi::ansi_preserving_slice(
-            &self.expand_tabs(line.graphemes(true)),
+            &self.expand_tabs(self.map_styles(line).graphemes(true)),
             if self.config.keep_plus_minus_markers {
                 0
             } else {
                 1
             },
         )
+    }
+
+    fn map_styles<'a>(&self, line: &'a str) -> Cow<'a, str> {
+        if let Some(styles_map) = &self.config.styles_map {
+            let transformed_line = ansi::parse_style_sections(line)
+                .iter()
+                .map(|(original_style, s)| {
+                    match styles_map.get(&style::ansi_term_style_equality_key(*original_style)) {
+                        Some(mapped_style) => mapped_style.paint(*s),
+                        None => original_style.paint(*s),
+                    }
+                })
+                .join("");
+            Cow::from(transformed_line)
+        } else {
+            Cow::from(line)
+        }
     }
 
     /// Expand tabs as spaces.
